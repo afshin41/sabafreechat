@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <title>Chat Room</title>
@@ -7,9 +7,7 @@
 
 <style>
 body { font-family: Tahoma, sans-serif; background: #ECE5DD; margin:0; display:flex; flex-direction:column; height:100vh;}
-header { 
-  background:#128C7E; color:#fff; padding:10px 20px; display:flex; justify-content: space-between; align-items:center; border-bottom-left-radius:20px; border-bottom-right-radius:20px;
-}
+header { background:#128C7E; color:#fff; padding:10px 20px; display:flex; justify-content: space-between; align-items:center; border-bottom-left-radius:20px; border-bottom-right-radius:20px;}
 #friendKey{padding:8px 12px; border-radius:20px; border:none; font-size:14px; width:200px;}
 #startBtn{padding:8px 20px; border-radius:20px; border:none; background:#075E54; color:#fff; font-weight:bold; cursor:pointer;}
 .chat-wrapper{flex:1; display:flex; flex-direction:column; padding:10px; overflow-y:auto; gap:5px; scroll-behavior:smooth;}
@@ -20,17 +18,16 @@ header {
 .right{background:#fff; color:#000; align-self:flex-end; text-align:right; border-radius:20px;}
 .date-divider{text-align:center; font-size:12px; color:#555; margin:10px 0;}
 .typing-status{font-size:12px;color:#555;margin-left:10px;}
-footer{display:flex; padding:10px; background:#f0f0f0; gap:10px; align-items:center;}
+footer{display:flex; padding:10px; background:#f0f0f0; gap:10px; align-items:center; flex-direction: row-reverse;}
 footer input{flex:1; padding:12px; border-radius:25px; border:1px solid #ccc; font-size:16px;}
 footer button{padding:12px 20px; border-radius:25px; border:none; background:#128C7E; color:#fff; font-weight:bold; cursor:pointer;}
-footer { flex-direction: row-reverse; }
 </style>
 </head>
 
 <body>
 <header>
   <button id="startBtn" onclick="startChat()">Chat</button>
-  <input type="text" id="friendKey" placeholder="Enter shared key">
+  <input type="text" id="friendKey" placeholder="Enter friend key">
 </header>
 
 <div class="chat-wrapper" id="chat"></div>
@@ -42,33 +39,34 @@ footer { flex-direction: row-reverse; }
 </footer>
 
 <script>
-let socket, lastDate="", pendingMessages=[], myKey="";
+let socket;
+let pendingMessages = [];
+let lastDate = "";
 
-// تاریخ امروز
+// فرمت تاریخ
 function formatDate(date){ return date.getFullYear()+"/"+(date.getMonth()+1)+"/"+date.getDate(); }
 
-// شروع چت با کلید مشترک
+// شروع چت و اتصال WebSocket
 function startChat(){
-  myKey = document.getElementById('friendKey').value.trim();
-  if(!myKey){ alert("Please enter a shared key"); return; }
+  const friendKey = document.getElementById('friendKey').value.trim();
+  if(!friendKey){ alert("Please enter friend key"); return; }
 
-  socket = new WebSocket("wss://sabafreechat.onrender.com
-                         "); // جایگزین با Render URL
-                         
-                         
-                         "); // جایگزین با Render URL
+  socket = new WebSocket("wss://<YOUR_RENDER_URL>"); // <- این را با URL Render خود جایگزین کنید
 
-  socket.onopen = ()=> {
+  socket.onopen = () => {
     addMessage("System","Connected to server","left");
-    socket.send(JSON.stringify({type:"join", key:myKey}));
-    flushPendingMessages();
+    // ارسال پیام‌های در انتظار
+    pendingMessages.forEach(msg => socket.send(JSON.stringify(msg)));
+    pendingMessages = [];
   };
 
-  socket.onmessage = (e)=>{
-    let data;
-    try{ data=JSON.parse(e.data); } catch(err){ return; }
-    if(data.type==="msg") addMessage("Friend", data.text,"left");
-    else if(data.type==="typing") showTypingStatus(data.status);
+  socket.onerror = (err) => { addMessage("System","Connection error","left"); };
+  socket.onclose = () => { addMessage("System","Connection closed","left"); };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if(data.type === "msg") addMessage("Friend", data.text, "left");
+    else if(data.type === "typing") showTypingStatus(data.status);
   };
 }
 
@@ -76,44 +74,37 @@ function startChat(){
 function sendMessage(){
   const msg = document.getElementById('messageInput').value.trim();
   if(!msg) return;
-  const messageData = {type:"msg", key:myKey, text:msg};
-  addMessage("Me", msg, "right", "pending");
-  if(socket && socket.readyState===WebSocket.OPEN){
+  const friendKey = document.getElementById('friendKey').value.trim();
+  const messageData = { type:"msg", key:friendKey, text: msg };
+
+  addMessage("Me", msg, "right");
+  if(socket && socket.readyState === WebSocket.OPEN){
     socket.send(JSON.stringify(messageData));
-    markMessageSent();
-  } else { pendingMessages.push(messageData); }
-  document.getElementById('messageInput').value='';
+  } else {
+    pendingMessages.push(messageData);
+  }
+  document.getElementById('messageInput').value = '';
   sendTypingStatus(false);
 }
 
-// ارسال پیام‌های معلق
-function flushPendingMessages(){
-  pendingMessages.forEach(msg=>{
-    socket.send(JSON.stringify(msg));
-    markMessageSent();
-  });
-  pendingMessages=[];
+// وضعیت تایپ
+function sendTypingStatus(status=true){
+  const friendKey = document.getElementById('friendKey').value.trim();
+  if(socket && socket.readyState === WebSocket.OPEN){
+    socket.send(JSON.stringify({type:"typing", key:friendKey, status}));
+  }
 }
+function showTypingStatus(status){ document.getElementById('typingStatus').innerText=status?"Friend is typing...":""; }
 
-// اضافه کردن پیام به UI
-function addMessage(sender,text,side,status=""){
+// اضافه کردن پیام به صفحه
+function addMessage(sender,text,side){
   const chat=document.getElementById('chat');
   const now=new Date(); const today=formatDate(now);
-  if(today!==lastDate){
-    const divDate=document.createElement('div'); divDate.className='date-divider'; divDate.innerText=today; chat.appendChild(divDate); lastDate=today;
-  }
+  if(today!==lastDate){ const divDate=document.createElement('div'); divDate.className='date-divider'; divDate.innerText=today; chat.appendChild(divDate); lastDate=today; }
   const div=document.createElement('div'); div.className="msg "+side; div.innerHTML=text.replace(/\n/g,"<br>");
   const timeSpan=document.createElement('div'); timeSpan.className="time"; timeSpan.innerText=now.getHours().toString().padStart(2,'0')+":"+now.getMinutes().toString().padStart(2,'0'); div.appendChild(timeSpan);
-  if(status){ const statusSpan=document.createElement('span'); statusSpan.className="status"; statusSpan.innerText=status==="pending"?"⌛":"✓"; div.appendChild(statusSpan);}
   chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
 }
-
-function markMessageSent(){ const divs=document.querySelectorAll(".msg.right .status"); if(divs.length) divs[divs.length-1].innerText="✓"; }
-
-// وضعیت تایپینگ
-function sendTypingStatus(status=true){ if(socket && socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify({type:"typing",key:myKey,status:status})); }
-function showTypingStatus(status){ document.getElementById('typingStatus').innerText = status ? "Friend is typing..." : ""; }
 </script>
 </body>
-
 </html>
