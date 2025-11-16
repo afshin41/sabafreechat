@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chat Room</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body { font-family: Tahoma, sans-serif; background: #ECE5DD; margin:0; display:flex; flex-direction:column; height:100vh;}
+header { 
+  background:#128C7E; color:#fff; padding:10px 20px; display:flex; justify-content: space-between; align-items:center; border-bottom-left-radius:20px; border-bottom-right-radius:20px;
+}
+#friendKey{padding:8px 12px; border-radius:20px; border:none; font-size:14px; width:200px;}
+#startBtn{padding:8px 20px; border-radius:20px; border:none; background:#075E54; color:#fff; font-weight:bold; cursor:pointer;}
+.chat-wrapper{flex:1; display:flex; flex-direction:column; padding:10px; overflow-y:auto; gap:5px; scroll-behavior:smooth;}
+.msg{padding:10px 15px; max-width:70%; word-wrap:break-word; position:relative; border-radius:20px; box-shadow:0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s ease;}
+.msg .time{font-size:10px;color:#555;margin-top:5px;text-align:right;}
+.msg .status{font-size:12px;color:#888;margin-left:5px;}
+.left{background:#D2B48C; color:#000; align-self:flex-start; border-radius:20px;}
+.right{background:#fff; color:#000; align-self:flex-end; text-align:right; border-radius:20px;}
+.date-divider{text-align:center; font-size:12px; color:#555; margin:10px 0;}
+.typing-status{font-size:12px;color:#555;margin-left:10px;}
+footer{display:flex; padding:10px; background:#f0f0f0; gap:10px; align-items:center;}
+footer input{flex:1; padding:12px; border-radius:25px; border:1px solid #ccc; font-size:16px;}
+footer button{padding:12px 20px; border-radius:25px; border:none; background:#128C7E; color:#fff; font-weight:bold; cursor:pointer;}
+footer { flex-direction: row-reverse; }
+</style>
+</head>
+
+<body>
+<header>
+  <button id="startBtn" onclick="startChat()">Chat</button>
+  <input type="text" id="friendKey" placeholder="Enter shared key">
+</header>
+
+<div class="chat-wrapper" id="chat"></div>
+<div id="typingStatus" class="typing-status"></div>
+
+<footer>
+  <input type="text" id="messageInput" placeholder="Type your message" oninput="sendTypingStatus()">
+  <button onclick="sendMessage()">Send</button>
+</footer>
+
+<script>
+let socket, lastDate="", pendingMessages=[], myKey="";
+
+// تاریخ امروز
+function formatDate(date){ return date.getFullYear()+"/"+(date.getMonth()+1)+"/"+date.getDate(); }
+
+// شروع چت با کلید مشترک
+function startChat(){
+  myKey = document.getElementById('friendKey').value.trim();
+  if(!myKey){ alert("Please enter a shared key"); return; }
+
+  socket = new WebSocket("wss://YOUR_RENDER_URL"); // جایگزین با Render URL
+
+  socket.onopen = ()=> {
+    addMessage("System","Connected to server","left");
+    socket.send(JSON.stringify({type:"join", key:myKey}));
+    flushPendingMessages();
+  };
+
+  socket.onmessage = (e)=>{
+    let data;
+    try{ data=JSON.parse(e.data); } catch(err){ return; }
+    if(data.type==="msg") addMessage("Friend", data.text,"left");
+    else if(data.type==="typing") showTypingStatus(data.status);
+  };
+}
+
+// ارسال پیام
+function sendMessage(){
+  const msg = document.getElementById('messageInput').value.trim();
+  if(!msg) return;
+  const messageData = {type:"msg", key:myKey, text:msg};
+  addMessage("Me", msg, "right", "pending");
+  if(socket && socket.readyState===WebSocket.OPEN){
+    socket.send(JSON.stringify(messageData));
+    markMessageSent();
+  } else { pendingMessages.push(messageData); }
+  document.getElementById('messageInput').value='';
+  sendTypingStatus(false);
+}
+
+// ارسال پیام‌های معلق
+function flushPendingMessages(){
+  pendingMessages.forEach(msg=>{
+    socket.send(JSON.stringify(msg));
+    markMessageSent();
+  });
+  pendingMessages=[];
+}
+
+// اضافه کردن پیام به UI
+function addMessage(sender,text,side,status=""){
+  const chat=document.getElementById('chat');
+  const now=new Date(); const today=formatDate(now);
+  if(today!==lastDate){
+    const divDate=document.createElement('div'); divDate.className='date-divider'; divDate.innerText=today; chat.appendChild(divDate); lastDate=today;
+  }
+  const div=document.createElement('div'); div.className="msg "+side; div.innerHTML=text.replace(/\n/g,"<br>");
+  const timeSpan=document.createElement('div'); timeSpan.className="time"; timeSpan.innerText=now.getHours().toString().padStart(2,'0')+":"+now.getMinutes().toString().padStart(2,'0'); div.appendChild(timeSpan);
+  if(status){ const statusSpan=document.createElement('span'); statusSpan.className="status"; statusSpan.innerText=status==="pending"?"⌛":"✓"; div.appendChild(statusSpan);}
+  chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
+}
+
+function markMessageSent(){ const divs=document.querySelectorAll(".msg.right .status"); if(divs.length) divs[divs.length-1].innerText="✓"; }
+
+// وضعیت تایپینگ
+function sendTypingStatus(status=true){ if(socket && socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify({type:"typing",key:myKey,status:status})); }
+function showTypingStatus(status){ document.getElementById('typingStatus').innerText = status ? "Friend is typing..." : ""; }
+</script>
+</body>
+</html>
