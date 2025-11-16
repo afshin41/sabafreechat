@@ -11,11 +11,10 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Serve index.html
+// سرو کردن HTML و JS
 app.use(express.static(__dirname));
 
-// اتاق‌ها بر اساس کلید مشترک
-let rooms = {}; 
+const rooms = {};
 
 wss.on("connection", ws => {
   let userKey = "";
@@ -29,15 +28,19 @@ wss.on("connection", ws => {
     if(type === "join"){
       userKey = key;
       if(!rooms[userKey]) rooms[userKey] = [];
-      rooms[userKey].push(ws);
-      // محدودیت دو نفر
+      if(!rooms[userKey].includes(ws)) rooms[userKey].push(ws);
       if(rooms[userKey].length > 2) rooms[userKey] = rooms[userKey].slice(-2);
+      rooms[userKey].forEach(client => {
+        if(client !== ws && client.readyState === client.OPEN){
+          client.send(JSON.stringify({type:"system", text:"Friend connected"}));
+        }
+      });
     }
 
     else if(type === "msg"){
       if(!rooms[key]) return;
       rooms[key].forEach(client => {
-        if(client !== ws && client.readyState === WebSocket.OPEN){
+        if(client !== ws && client.readyState === client.OPEN){
           client.send(JSON.stringify({type:"msg", text}));
         }
       });
@@ -46,20 +49,27 @@ wss.on("connection", ws => {
     else if(type === "typing"){
       if(!rooms[key]) return;
       rooms[key].forEach(client => {
-        if(client !== ws && client.readyState === WebSocket.OPEN){
+        if(client !== ws && client.readyState === client.OPEN){
           client.send(JSON.stringify({type:"typing", status}));
         }
       });
     }
   });
 
-  ws.on("close", ()=>{
+  ws.on("close", () => {
     if(userKey && rooms[userKey]){
       rooms[userKey] = rooms[userKey].filter(c => c !== ws);
       if(rooms[userKey].length === 0) delete rooms[userKey];
+      if(rooms[userKey]){
+        rooms[userKey].forEach(client => {
+          if(client.readyState === client.OPEN){
+            client.send(JSON.stringify({type:"system", text:"Friend disconnected"}));
+          }
+        });
+      }
     }
   });
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, ()=>console.log("Server running on port", PORT));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
