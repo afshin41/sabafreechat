@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Chat Room</title>
@@ -24,7 +24,7 @@ footer button{padding:12px 20px; border-radius:25px; border:none; background:#12
 </head>
 <body>
 <header>
-  <button id="startBtn" onclick="startChat()">Chat</button>
+  <button type="button" id="startBtn">Chat</button>
   <input type="text" id="friendKey" placeholder="Enter friend key">
   <div id="connectionStatus">Disconnected ❌</div>
 </header>
@@ -50,6 +50,11 @@ function updateConnectionStatus(text,color){
   el.innerText = text;
   el.style.color = color;
 }
+
+document.getElementById("startBtn").addEventListener("click", (e)=>{
+  e.preventDefault();
+  startChat();
+});
 
 function startChat(){
   const friendKey = document.getElementById('friendKey').value.trim();
