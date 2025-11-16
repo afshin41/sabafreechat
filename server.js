@@ -30,6 +30,7 @@ wss.on("connection", ws => {
       if(!rooms[userKey]) rooms[userKey] = [];
       if(!rooms[userKey].includes(ws)) rooms[userKey].push(ws);
       if(rooms[userKey].length > 2) rooms[userKey] = rooms[userKey].slice(-2);
+
       rooms[userKey].forEach(client => {
         if(client !== ws && client.readyState === client.OPEN){
           client.send(JSON.stringify({type:"system", text:"Friend connected"}));
