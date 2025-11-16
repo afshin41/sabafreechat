@@ -4,18 +4,17 @@
 <meta charset="UTF-8">
 <title>Chat Room</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
 body { font-family: Tahoma, sans-serif; background: #ECE5DD; margin:0; display:flex; flex-direction:column; height:100vh;}
 header { background:#128C7E; color:#fff; padding:10px 20px; display:flex; justify-content: space-between; align-items:center; border-bottom-left-radius:20px; border-bottom-right-radius:20px;}
 #friendKey{padding:8px 12px; border-radius:20px; border:none; font-size:14px; width:200px;}
 #startBtn{padding:8px 20px; border-radius:20px; border:none; background:#075E54; color:#fff; font-weight:bold; cursor:pointer;}
+#connectionStatus{margin-left:10px;font-size:14px;font-weight:bold;}
 .chat-wrapper{flex:1; display:flex; flex-direction:column; padding:10px; overflow-y:auto; gap:5px; scroll-behavior:smooth;}
 .msg{padding:10px 15px; max-width:70%; word-wrap:break-word; position:relative; border-radius:20px; box-shadow:0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s ease;}
 .msg .time{font-size:10px;color:#555;margin-top:5px;text-align:right;}
-.msg .status{font-size:12px;color:#888;margin-left:5px;}
 .left{background:#D2B48C; color:#000; align-self:flex-start; border-radius:20px;}
-.right{background:#fff; color:#000; align-self:flex-end; text-align:right; border-radius:20px;}
+.right{background:#128C7E; color:#fff; align-self:flex-end; text-align:right; border-radius:20px;}
 .date-divider{text-align:center; font-size:12px; color:#555; margin:10px 0;}
 .typing-status{font-size:12px;color:#555;margin-left:10px;}
 footer{display:flex; padding:10px; background:#f0f0f0; gap:10px; align-items:center; flex-direction: row-reverse;}
@@ -23,11 +22,11 @@ footer input{flex:1; padding:12px; border-radius:25px; border:1px solid #ccc; fo
 footer button{padding:12px 20px; border-radius:25px; border:none; background:#128C7E; color:#fff; font-weight:bold; cursor:pointer;}
 </style>
 </head>
-
 <body>
 <header>
   <button id="startBtn" onclick="startChat()">Chat</button>
   <input type="text" id="friendKey" placeholder="Enter friend key">
+  <div id="connectionStatus">Disconnected ❌</div>
 </header>
 
 <div class="chat-wrapper" id="chat"></div>
@@ -42,41 +41,47 @@ footer button{padding:12px 20px; border-radius:25px; border:none; background:#12
 let socket;
 let pendingMessages = [];
 let lastDate = "";
+let friendKeyGlobal = "";
 
-// فرمت تاریخ
 function formatDate(date){ return date.getFullYear()+"/"+(date.getMonth()+1)+"/"+date.getDate(); }
 
-// شروع چت و اتصال WebSocket
+function updateConnectionStatus(text,color){
+  const el = document.getElementById("connectionStatus");
+  el.innerText = text;
+  el.style.color = color;
+}
+
 function startChat(){
   const friendKey = document.getElementById('friendKey').value.trim();
   if(!friendKey){ alert("Please enter friend key"); return; }
+  friendKeyGlobal = friendKey;
 
-  socket = new WebSocket("wss://<YOUR_RENDER_URL>"); // <- این را با URL Render خود جایگزین کنید
+  updateConnectionStatus("Connecting...", "orange");
+
+  socket = new WebSocket("wss://sabafreechat.onrender.com");
 
   socket.onopen = () => {
-    addMessage("System","Connected to server","left");
-    // ارسال پیام‌های در انتظار
+    updateConnectionStatus("Connected ✅", "green");
+    socket.send(JSON.stringify({type:"join", key:friendKey}));
     pendingMessages.forEach(msg => socket.send(JSON.stringify(msg)));
     pendingMessages = [];
   };
 
-  socket.onerror = (err) => { addMessage("System","Connection error","left"); };
-  socket.onclose = () => { addMessage("System","Connection closed","left"); };
+  socket.onerror = () => updateConnectionStatus("Connection error ⚠️", "orange");
+  socket.onclose = () => updateConnectionStatus("Disconnected ❌", "red");
 
   socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if(data.type === "msg") addMessage("Friend", data.text, "left");
     else if(data.type === "typing") showTypingStatus(data.status);
+    else if(data.type === "system") addMessage("System", data.text, "left");
   };
 }
 
-// ارسال پیام
 function sendMessage(){
   const msg = document.getElementById('messageInput').value.trim();
   if(!msg) return;
-  const friendKey = document.getElementById('friendKey').value.trim();
-  const messageData = { type:"msg", key:friendKey, text: msg };
-
+  const messageData = { type:"msg", key:friendKeyGlobal, text: msg };
   addMessage("Me", msg, "right");
   if(socket && socket.readyState === WebSocket.OPEN){
     socket.send(JSON.stringify(messageData));
@@ -87,16 +92,13 @@ function sendMessage(){
   sendTypingStatus(false);
 }
 
-// وضعیت تایپ
 function sendTypingStatus(status=true){
-  const friendKey = document.getElementById('friendKey').value.trim();
   if(socket && socket.readyState === WebSocket.OPEN){
-    socket.send(JSON.stringify({type:"typing", key:friendKey, status}));
+    socket.send(JSON.stringify({type:"typing", key:friendKeyGlobal, status}));
   }
 }
 function showTypingStatus(status){ document.getElementById('typingStatus').innerText=status?"Friend is typing...":""; }
 
-// اضافه کردن پیام به صفحه
 function addMessage(sender,text,side){
   const chat=document.getElementById('chat');
   const now=new Date(); const today=formatDate(now);
