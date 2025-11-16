@@ -52,7 +52,11 @@ function startChat(){
   myKey = document.getElementById('friendKey').value.trim();
   if(!myKey){ alert("Please enter a shared key"); return; }
 
-  socket = new WebSocket("wss://YOUR_RENDER_URL"); // جایگزین با Render URL
+  socket = new WebSocket("wss://sabafreechat.onrender.com
+                         "); // جایگزین با Render URL
+                         
+                         
+                         "); // جایگزین با Render URL
 
   socket.onopen = ()=> {
     addMessage("System","Connected to server","left");
@@ -111,4 +115,5 @@ function sendTypingStatus(status=true){ if(socket && socket.readyState===WebSock
 function showTypingStatus(status){ document.getElementById('typingStatus').innerText = status ? "Friend is typing..." : ""; }
 </script>
 </body>
+
 </html>
